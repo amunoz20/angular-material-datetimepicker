@@ -33,8 +33,19 @@
     + '                </div>'
     + '                <div class="dtp-actual-num">{{picker.currentDate.format("DD")}}</div>'
     + '                <div layout="row">'
-    + ' <div ng-click="picker.incrementYear(-1)" class="dtp-year-btn dtp-year-btn-prev" flex="30"><span ng-if="picker.isPreviousYearVisible()" >&#x25B2;</span></div>'
-    + '                    <div class="dtp-actual-year" flex>{{picker.currentDate.format("YYYY")}}</div>'
+    + ' <div ng-click="picker.incrementYear(-1)" class="dtp-year-btn dtp-year-btn-prev" flex="30"><span ng-if="picker.isPreviousYearVisible()" >&#x25B2;</span></div>'  
+    + '                     <div class="dtp-actual-year" flex>'
+    + '                          <md-menu md-offset="-30 0">'
+    + '                            <md-button aria-label="Open demo menu" class="md-icon-button" ng-click="$mdOpenMenu($event)">'
+    + '                              {{picker.currentDate.format("YYYY")}}'
+    + '                            </md-button>'
+    + '                            <md-menu-content width="2">'
+    + '                              <md-menu-item ng-repeat="year in picker.validYears">'
+    + '                                 <md-button ng-click="picker.incrementYear(null, year)" style="color:#1E1E1E">{{year}}</md-button>'
+    + '                              </md-menu-item>'
+    + '                             </md-menu-content>'
+    + '                          </md-menu>'
+    + '                     </div>'    
     + ' <div ng-click="picker.incrementYear(1)" class="dtp-year-btn dtp-year-btn-next" flex="30"><span ng-if="picker.isNextYearVisible()" >&#x25BC;</span></div>'
     + '                </div>'
     + '            </div>'//start time
@@ -65,6 +76,7 @@
     + '            <md-button class="dtp-btn-ok md-button" ng-click="picker.ok()"> {{picker.params.okText}}</md-button>'
     + '      </md-dialog-actions>'
     + '</md-dialog>';
+  
 
   angular.module(moduleName, ['ngMaterial'])
     .provider('mdcDatetimePickerDefaultLocale', function () {
@@ -146,11 +158,11 @@
                   controller: PluginController,
                   controllerAs: 'picker',
                   locals: locals,
+                  skipHide:true,
                   openFrom: element,
                   parent: angular.element(document.body),
                   bindToController: true,
-                  disableParentScroll: false,
-                  skipHide: true
+                  disableParentScroll: false
                 })
                 .then(function (v) {
                   scope.currentDate = v ? v._d : v;
@@ -171,6 +183,7 @@
 
     this.minDate;
     this.maxDate;
+    this.validYears = [];
 
     this._attachedEvents = [];
     this.VIEWS = VIEW_STATES;
@@ -242,11 +255,19 @@
       this.currentDate = _dateParam(this.params.currentDate, moment());
       this.minDate = _dateParam(this.params.minDate);
       this.maxDate = _dateParam(this.params.maxDate);
+            
+      var stopDate = 1900;
+      var currentDate = parseInt(moment().year());
+      while (currentDate - stopDate >= 0){
+          this.validYears.push(currentDate);
+          currentDate --;
+      }      
+
       this.selectDate(this.currentDate);
-    },
+    },    
     initDate: function (d) {
       this.currentView = VIEW_STATES.DATE;
-    },
+    },    
     initHours: function () {
       this.currentView = VIEW_STATES.HOUR;
     },
@@ -347,13 +368,20 @@
     isPM: function () {
       return this.meridien === 'PM';
     },
-    incrementYear: function (amount) {
-      if (amount === 1 && this.isNextYearVisible()) {
-        this.selectDate(this.currentDate.add(amount, 'year'));
+    incrementYear: function (amount, year) {      
+      var newAmount;      
+      if (amount == null){
+        newAmount = year - parseInt(this.currentDate.year());        
+      }else{
+        newAmount = amount;
+      }      
+
+      if (newAmount > 0 && this.isNextYearVisible()) {        
+        this.selectDate(this.currentDate.add('year', newAmount));
       }
 
-      if (amount === -1 && this.isPreviousYearVisible()) {
-        this.selectDate(this.currentDate.add(amount, 'year'));
+      if (newAmount < 0 && this.isPreviousYearVisible()) {        
+        this.selectDate(this.currentDate.add('year', newAmount));
       }
     },
     isPreviousMonthVisible: function () {
@@ -489,7 +517,8 @@
     .directive('mdcDatetimePickerCalendar', [
       function () {
 
-        var YEAR_MIN = 1900,
+        var startDate = moment(),
+          YEAR_MIN = 1900,
           YEAR_MAX = 2100,
           MONTHS_IN_ALL = (YEAR_MAX - YEAR_MIN + 1) * 12,
           ITEM_HEIGHT = 240,
@@ -551,7 +580,7 @@
               }, function (val2, val1) {
                 if (val2 != val1) {
                   var nDate = moment(val2, 'YYYY-MM');
-                  var index = currentMonthIndex(nDate) - calendar.months[0];
+                  var index = currentMonthIndex(nDate);
                   if (calendar.topIndex != index) {
                     calendar.topIndex = index;
                   }
@@ -707,7 +736,7 @@
       function () {
 
         var template = '<div class="dtp-picker-clock"><span ng-if="!points || points.length < 1">&nbsp;</span>'
-          + '<div ng-repeat="point in points" class="dtp-picker-time" ng-style="point.style">'
+          + '<div ng-repeat="point in points" class="dtp-picker-time" style="margin-left: {{point.left}}px; margin-top: {{point.top}}px;">'
           + '   <a href="#" mdc-dtp-noclick ng-class="{selected: point.value===currentValue}" class="dtp-select-hour" ng-click="setTime(point.value)" ng-if="pointAvailable(point)">{{point.display}}</a>'
           + '   <a href="#" mdc-dtp-noclick class="disabled dtp-select-hour" ng-if="!pointAvailable(point)">{{point.display}}</a>'
           + '</div>'
@@ -750,12 +779,11 @@
               for (var h = 0; h < 12; ++h) {
                 var x = j * Math.sin(Math.PI * 2 * (h / 12));
                 var y = j * Math.cos(Math.PI * 2 * (h / 12));
-                var left = (r + x + pL / 2) - (pL + mL);
-                var top = (r - y - mT / 2) - (pT + mT);
 
                 var hour = {
-                  value: (minuteMode ? (h * 5) : h), //5 for minute 60/12
-                  style: {'margin-left': left+'px', 'margin-top': top+'px'}
+                  left: (r + x + pL / 2) - (pL + mL),
+                  top: (r - y - mT / 2) - (pT + mT),
+                  value: (minuteMode ? (h * 5) : h) //5 for minute 60/12
                 };
 
                 if (minuteMode) {
@@ -817,9 +845,7 @@
             var rotateElement = function (el, deg) {
               angular.element(el).css({
                 WebkitTransform: 'rotate(' + deg + 'deg)',
-                '-moz-transform': 'rotate(' + deg + 'deg)',
-                '-ms-transform': 'rotate(' + deg + 'deg)',
-                'transform': 'rotate(' + deg + 'deg)'
+                '-moz-transform': 'rotate(' + deg + 'deg)'
               });
             };
 
@@ -877,11 +903,11 @@
               return minuteMode ? picker.isMinuteAvailable(point.value) : picker.isHourAvailable(point.value);
             };
 
-            var unWatcher = scope.$watch(function () {
+            var unwatcher = scope.$watch(function () {
               return element[0].querySelectorAll('div').length;
             }, function () {
               exec();
-              unWatcher();
+              unwatcher();
             });
           }
         }
